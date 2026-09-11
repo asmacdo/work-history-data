@@ -1,0 +1,91 @@
+# Daily refresh of asmacdo's GitHub activity, pushed to the "Austin's Work" board (con/projects/14).
+#
+# The expanded historia workflow (https://historia.readthedocs.io/en/latest/tutorial/manual-automation-setup.html)
+# rather than the one-step composite action: the composite populates with derived statuses
+# (Done / In Progress / Todo) that do not exist on the con "Work template" board, so the
+# populate step below runs the pinned image directly with `--status Incoming`.
+#
+# Secrets: GH_PAT is a fine-grained token (resource owner con, public repositories, org
+# permission Projects read/write). It only reads activity and writes the board. Pushes use the
+# workflow's own GITHUB_TOKEN, which is why the job has `contents: write`.
+
+name: Update work history data
+
+on:
+  workflow_dispatch:
+    inputs:
+      recency:
+        description: "Number of recent days to fetch (default: 2)"
+        required: false
+        default: "2"
+  schedule:
+    - cron: "0 0 * * *"
+
+env:
+  USERNAME: asmacdo
+  PROJECT_URL: https://github.com/orgs/con/projects/14
+  RECENCY: ${{ inputs.recency || '2' }}
+
+jobs:
+  Update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      # Without an explicit token, the checkout uses the workflow's own GITHUB_TOKEN.
+      - name: Check out the data repository
+        uses: actions/checkout@v7
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update work history data
+        uses: CodyCBakerPhD/historia-action/update-github@v2
+        with:
+          directory: history
+          username: ${{ env.USERNAME }}
+          recency: ${{ env.RECENCY }}
+          token: ${{ secrets.GH_PAT }}
+
+      # Container actions run as root, so the files the update wrote are root-owned.
+      # The git steps below run as the unprivileged runner user and need to modify them.
+      - name: Restore workspace ownership
+        run: sudo chown -R "$(id -u):$(id -g)" .
+
+      - name: Commit and push new content
+        run: |
+          git add history
+          git diff --quiet --cached || git commit --message "update"
+          git push
+
+      # The project-populate action does not expose --status, so run the same pinned image
+      # directly. New items land in Incoming; items already on the board are left alone.
+      - name: Populate the GitHub project
+        uses: docker://ghcr.io/codycbakerphd/historia:0.11.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        with:
+          args: project populate --directory history --url ${{ env.PROJECT_URL }} --status Incoming --yes
+
+      # Populating dates the items it adds; this catches items whose dates moved afterwards
+      # (mostly ones closed since). Same window as the fetch, so a run covers what it could change.
+      - name: Update GitHub project dates
+        uses: CodyCBakerPhD/historia-action/project-update-dates@v2
+        with:
+          url: ${{ env.PROJECT_URL }}
+          recency: ${{ env.RECENCY }}
+          token: ${{ secrets.GH_PAT }}
+
+      # Last, because it leaves the checkout on the orphan archive branch.
+      - name: Push the compressed archive
+        run: |
+          tar -czf content.tar.gz history
+          git branch -D dist || true
+          git checkout --orphan dist
+          git rm -rf --cached .
+          git add content.tar.gz
+          git commit --message "update dist archive [skip ci]"
+          git push --force origin HEAD:dist

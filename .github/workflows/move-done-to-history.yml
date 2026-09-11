@@ -1,0 +1,25 @@
+# Daily sweep of the "Austin's Work" board (con/projects/14): DONE -> History.
+# DONE holds what Yarik has seen in the 1:1; History is the analytics archive.
+# Same shape as CodyCBakerPhD/work-history-data's move-done-to-history.yml.
+
+name: Move DONE to History
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  Transition:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run transition
+        uses: docker://ghcr.io/codycbakerphd/historia:0.11.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        with:
+          # An action always runs headless, so the confirmation prompt is never answerable.
+          args: project transition --url https://github.com/orgs/con/projects/14 --current DONE --new History --yes

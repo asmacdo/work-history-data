@@ -17,7 +17,6 @@ It only reads activity and writes the board; pushes use the workflow's own `GITH
 
 - `history/` — historia JSON snapshots. Ephemeral: fully regenerable from GitHub by re-running `historia update github` with a wider `--recency`.
 - `scripts/migrate-to-con.py` — the one-time card migration from the previous user-owned board (`asmacdo/projects/7`) to the `con` board, kept for the record.
-- `refresh` — the pre-automation local wrapper (duct + `datalad run`) that populated the old board; superseded by `update.yml`.
 - `.venv-host/` — local Python venv (gitignored) for running historia by hand.
 
 ## Running historia by hand
